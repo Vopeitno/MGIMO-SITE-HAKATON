@@ -1,0 +1,516 @@
+openapi: 3.0.3
+info:
+  title: Переписка MGIMO
+  version: 1.0.0
+  description: |
+    Дополнительный контракт личных и групповых чатов MongoDB. Следующий абзац описывает личные диалоги.
+    Участники — две различные действующие записи accounts PostgreSQL.
+    Все роли STUDENT, TEACHER, SUPPORT, DEAN, ADMIN имеют одинаковые права:
+    только участники могут читать диалог, отправлять сообщения и отмечать прочтение.
+    ADMIN не имеет доступа к чужой переписке. Отключение текущего аккаунта
+    блокируется общей авторизацией; обработчики дополнительно проверяют accounts.
+    При отсутствии или отключении участника операция возвращает 403.
+    В списке диалогов проверяются оба участника каждой возвращаемой записи;
+    наличие недействующего участника на странице приводит к 403 всей страницы.
+    UUID аккаунтов канонизируются, сортируются; conversationID вычисляется как
+    uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join(ids, ":"))).
+    MongoDB _id обеспечивает уникальность диалога при конкурентном создании.
+    updatedAt — время создания диалога или последней отправки, не прочтения.
+    MongoDB и PostgreSQL не имеют общей транзакции и межбазовых каскадов.
+    Проверка активности отражает состояние на момент SQL-запроса.
+    Удаление аккаунта не удаляет переписку. Политика хранения отдельно не определена.
+    Запись сообщения и обновление updatedAt выполняются отдельно: при 503 сообщение
+    уже могло сохраниться. Повтор с тем же messageID, автором, чатом и текстом не создаёт дубликата. Без messageID сервер создаёт новый UUID.
+    Списки и total читаются отдельно и могут отличаться при конкурентных изменениях.
+    MongoDB подключается главным процессом; InitMessages создаёт индексы.
+    Недоступность сервиса сообщений возвращает 503 только из его обработчиков.
+servers:
+  - url: /api/v1/MGIMO/messages
+security:
+  - bearerAuth: []
+x-roles: [STUDENT, TEACHER, SUPPORT, DEAN, ADMIN]
+paths:
+  /contacts:
+    get:
+      operationId: chatContacts
+      summary: Контакты для нового диалога или своей группы
+      description: Возвращает только имена, роли и идентификаторы доступных контактов. Без параметра number область определяется учебными связями. Полный номер ищется среди действующих студентов, преподавателей и сотрудников независимо от группы.
+      x-roles: [STUDENT, TEACHER, DEAN, SUPPORT]
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/offset'
+      - name: number
+        in: query
+        description: Точный номер студента, преподавателя или сотрудника
+        schema: {type: integer, minimum: 1, maximum: 2147483647}
+      responses:
+        '200':
+          description: Страница контактов
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Page'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items: {$ref: '#/components/schemas/ChatContact'}
+        default:
+          $ref: '#/components/responses/Error'
+  /groups:
+    get:
+      operationId: groupsList
+      summary: Учебные чаты и свои группы участника
+      responses:
+        '200':
+          description: Доступные группы и личные счётчики
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: {$ref: '#/components/schemas/ChatGroup'}
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: groupCreate
+      summary: Создать группу из доступных контактов
+      description: Создатель включается автоматически. Участники выбираются при создании.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, memberAccountIDs]
+              properties:
+                title: {type: string, minLength: 1, maxLength: 80}
+                contactNumbers:
+                  type: object
+                  description: Для контактов вне обычного списка передаётся точный номер по ключу accountID.
+                  additionalProperties: {type: integer, minimum: 1, maximum: 2147483647}
+                memberAccountIDs:
+                  type: array
+                  minItems: 2
+                  maxItems: 31
+                  uniqueItems: true
+                  items: {type: string, format: uuid}
+      responses:
+        '201':
+          description: Группа создана
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ChatGroup'}
+        default:
+          $ref: '#/components/responses/Error'
+  /groups/{groupID}/messages:
+    parameters:
+    - $ref: '#/components/parameters/groupID'
+    get:
+      operationId: groupMessages
+      summary: История группы для участника
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Сообщения по времени и идентификатору
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Page'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items: {$ref: '#/components/schemas/ChatGroupMessage'}
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: groupSend
+      summary: Отправить текст в группу
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ChatSend'}
+      responses:
+        '201':
+          description: Сохранённое сообщение
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ChatGroupMessage'}
+        default:
+          $ref: '#/components/responses/Error'
+  /groups/{groupID}/read:
+    parameters:
+    - $ref: '#/components/parameters/groupID'
+    post:
+      operationId: groupRead
+      summary: Отметить прочтение для текущего участника
+      parameters:
+      - $ref: '#/components/parameters/chatReadThrough'
+      responses:
+        '204': {description: Собственная отметка обновлена}
+        default:
+          $ref: '#/components/responses/Error'
+  /deanery-contacts:
+    get:
+      operationId: deaneryContacts
+      summary: Действующие сотрудники деканата своего факультета
+      description: Только STUDENT. Факультет определяется из students.facultyID, деканат через faculties/deanery_staff. Возвращаются только действующие аккаунты DEAN с активным работодателем. Параметры запрещены; email и паспортные данные не выдаются.
+      x-roles: [STUDENT]
+      responses:
+        '200':
+          description: Доступные сотрудники, пустой список при отсутствии назначений
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [accountID, displayName, role]
+                      properties:
+                        accountID:
+                          type: string
+                          format: uuid
+                        displayName:
+                          type: string
+                        role:
+                          type: string
+        default:
+          $ref: '#/components/responses/Error'
+  /conversations/{conversationID}/participants:
+    parameters:
+    - $ref: '#/components/parameters/conversationID'
+    get:
+      operationId: conversationParticipants
+      summary: Безопасные имена участников собственного диалога
+      description: Только участник действующего диалога; чужой диалог 404, недействующий аккаунт 403. Возвращаются только accountID/displayName/role.
+      responses:
+        '200':
+          description: Два участника диалога
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [accountID, displayName, role]
+                      properties:
+                        accountID:
+                          type: string
+                          format: uuid
+                        displayName:
+                          type: string
+                        role:
+                          type: string
+        default:
+          $ref: '#/components/responses/Error'
+  /conversations:
+    get:
+      operationId: messagesConversations
+      summary: Собственные диалоги по updatedAt убыванию, затем conversationID возрастанию
+      parameters:
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Страница диалогов
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    required: [items]
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Conversation'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: messagesConversationCreate
+      summary: Создать или получить личный диалог
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [participantAccountID]
+              properties:
+                participantAccountID:
+                  type: string
+                  format: uuid
+                  description: Аккаунт собеседника; собственный и нулевой UUID запрещены
+      responses:
+        '201': &conversationResponse
+          description: Диалог
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+        '200': *conversationResponse
+        default:
+          $ref: '#/components/responses/Error'
+  /conversations/{conversationID}/messages:
+    parameters:
+      - $ref: '#/components/parameters/conversationID'
+    get:
+      operationId: messagesList
+      summary: Сообщения по createdAt, затем messageID возрастанию
+      parameters:
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Страница сообщений; пустой список всегда массив
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    required: [items]
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Message'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: messagesSend
+      summary: Отправить сообщение от текущего аккаунта
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                messageID:
+                  type: string
+                  format: uuid
+                  description: Необязательный идентификатор безопасного повтора
+                text:
+                  type: string
+                  minLength: 1
+                  maxLength: 10000
+                  description: Корректный UTF-8, не только пробелы; исходный текст сохраняется
+      responses:
+        '201':
+          description: Сообщение создано, readAt равен null
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        default:
+          $ref: '#/components/responses/Error'
+  /conversations/{conversationID}/read:
+    parameters:
+      - $ref: '#/components/parameters/conversationID'
+    post:
+      operationId: messagesRead
+      summary: Отметить входящие сообщения прочитанными
+      description: |
+        Только сообщения другого участника с readAt=null и createdAt не позднее
+        серверного времени начала обновления. readAt — серверное время UTC.
+        Существующий readAt не перезаписывается; исходящие сообщения не меняются.
+        Параметр through ограничивает отметку последним полученным сообщением.
+        Без параметра меняются входящие сообщения до серверного времени.
+      parameters:
+      - $ref: '#/components/parameters/chatReadThrough'
+      responses:
+        '204':
+          description: Прочтение отмечено, в том числе когда непрочитанных сообщений нет
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    groupID:
+      name: groupID
+      in: path
+      required: true
+      schema: {type: string}
+      description: study-номер внутренней группы либо UUID своей группы
+    chatReadThrough:
+      name: through
+      in: query
+      schema: {type: string, format: uuid}
+      description: Последнее сообщение, до которого включительно обновляется отметка
+    conversationID:
+      name: conversationID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        maximum: 100000
+        default: 0
+  schemas:
+    ChatContact:
+      type: object
+      required: [accountID, displayName, role]
+      properties:
+        accountID: {type: string, format: uuid}
+        displayName: {type: string}
+        role: {type: string}
+    ChatGroup:
+      type: object
+      required: [groupID, title, kind, updatedAt, unread, memberCount]
+      properties:
+        groupID: {type: string}
+        title: {type: string}
+        kind: {type: string, enum: [academic, custom]}
+        updatedAt: {type: string, format: date-time}
+        unread: {type: integer, minimum: 0}
+        memberCount: {type: integer, minimum: 0, description: Ноль для учебного чата с динамическим составом}
+    ChatGroupMessage:
+      type: object
+      required: [messageID, groupID, senderAccountID, senderName, text, createdAt, read]
+      properties:
+        messageID: {type: string, format: uuid}
+        groupID: {type: string}
+        senderAccountID: {type: string, format: uuid}
+        senderName: {type: string}
+        text: {type: string, minLength: 1, maxLength: 10000}
+        createdAt: {type: string, format: date-time}
+        read: {type: boolean, description: Отметка текущего участника}
+    ChatSend:
+      type: object
+      required: [text]
+      properties:
+        text: {type: string, minLength: 1, maxLength: 10000}
+        messageID: {type: string, format: uuid, description: Клиентский идентификатор для безопасной повторной отправки}
+    Page:
+      type: object
+      required: [total, limit, offset]
+      properties:
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        offset:
+          type: integer
+          minimum: 0
+          maximum: 100000
+    Conversation:
+      type: object
+      required: [conversationID, participants, updatedAt]
+      properties:
+        members:
+          x-derived: true
+          type: array
+          description: Дополнительная безопасная проекция участников в списке диалогов; запрашивается одним SQL-запросом на страницу
+          items:
+            type: object
+            required: [accountID, displayName, role]
+            properties:
+              accountID:
+                type: string
+                format: uuid
+              displayName:
+                type: string
+              role:
+                type: string
+        conversationID:
+          type: string
+          format: uuid
+        participants:
+          type: array
+          minItems: 2
+          maxItems: 2
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        updatedAt:
+          type: string
+          format: date-time
+    Message:
+      type: object
+      required: [messageID, conversationID, senderAccountID, text, createdAt, readAt]
+      properties:
+        messageID:
+          type: string
+          format: uuid
+        conversationID:
+          type: string
+          format: uuid
+        senderAccountID:
+          type: string
+          format: uuid
+        text:
+          type: string
+          minLength: 1
+          maxLength: 10000
+        createdAt:
+          type: string
+          format: date-time
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+  responses:
+    Error:
+      description: |
+        400 BAD_REQUEST — некорректный UUID, JSON или пагинация (включая повторы).
+        401 UNAUTHORIZED — отсутствует действующая авторизация.
+        403 FORBIDDEN — участник отсутствует или отключён.
+        404 NOT_FOUND — диалог отсутствует или текущий аккаунт не является участником.
+        422 VALIDATION_ERROR — некорректный текст.
+        503 MESSAGES_UNAVAILABLE — MongoDB или проверка accounts недоступны.
+        Ошибки общей авторизации и декодирования формируются общими обработчиками.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

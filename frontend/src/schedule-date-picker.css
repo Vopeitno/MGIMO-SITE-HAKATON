@@ -1,0 +1,181 @@
+.app .schedule-date-trigger {
+  white-space: nowrap;
+  padding-inline: 12px;
+}
+
+.schedule-date-trigger svg {
+  flex: none;
+  color: var(--violet-dark);
+}
+
+.modal.schedule-date-dialog {
+  width: min(380px, calc(100vw - 28px));
+  max-height: calc(100dvh - 28px);
+  border: 1px solid var(--line);
+  padding: clamp(12px, 5vw, 24px);
+  color: var(--text);
+}
+
+.schedule-date-dialog::backdrop {
+  background: #24203557;
+  backdrop-filter: blur(6px);
+}
+
+.schedule-date-header,
+.schedule-date-month {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.schedule-date-month {
+  margin-top: 14px;
+}
+
+.schedule-date-month h3 {
+  margin: 0;
+  font-size: 15px;
+  text-align: center;
+  text-transform: capitalize;
+}
+
+.schedule-date-grid {
+  width: 100%;
+  table-layout: fixed;
+  border-spacing: 3px;
+  margin-top: 8px;
+  text-align: center;
+}
+
+.schedule-date-grid th {
+  padding: 5px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.schedule-date-grid td {
+  padding: 0;
+}
+
+.app .schedule-date-day {
+  display: grid;
+  width: 100%;
+  min-height: 36px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.app .schedule-date-day[data-adjacent="true"] {
+  color: var(--muted);
+}
+
+.app .schedule-date-day[aria-current="date"] {
+  border-color: var(--violet);
+}
+
+.app .schedule-date-day:hover {
+  background: var(--soft);
+}
+
+.app .schedule-date-grid td[aria-selected="true"] > button {
+  background: var(--violet-soft);
+  color: var(--violet-dark);
+}
+
+.app .schedule-date-day:focus-visible,
+.app .schedule-date-trigger:focus-visible,
+.app .schedule-date-dialog button:focus-visible {
+  outline: 2px solid var(--violet-dark);
+  outline-offset: 1px;
+}
+
+@media (max-width: 680px), (max-width: 950px) and (max-height: 440px) {
+  .app .schedule-date-trigger {
+    min-height: 36px;
+    gap: 6px;
+    padding: 4px 9px;
+    font-size: 13px;
+  }
+
+  .modal.schedule-date-dialog {
+    width: min(312px, calc(100% - 16px));
+    max-width: none;
+    max-height: calc(100dvh - 16px);
+    padding: 8px;
+    border-radius: 18px;
+  }
+
+  .schedule-date-dialog[open] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 6px;
+  }
+
+  .schedule-date-header {
+    grid-area: 1 / 2;
+  }
+
+  .schedule-date-header h2 {
+    display: none;
+  }
+
+  .schedule-date-month {
+    grid-area: 1 / 1;
+    gap: 4px;
+    margin-top: 0;
+  }
+
+  .schedule-date-month button,
+  .schedule-date-header button {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: 10px;
+  }
+
+  .schedule-date-grid,
+  .schedule-date-dialog .modal-actions {
+    grid-column: 1 / -1;
+  }
+
+  .schedule-date-grid {
+    border-spacing: 0;
+    margin-top: 4px;
+  }
+
+  .schedule-date-grid th {
+    padding: 2px 0;
+  }
+
+  .schedule-date-grid tr[data-outside-month="true"] {
+    display: none;
+  }
+
+  .schedule-date-dialog .modal-actions {
+    margin-top: 6px;
+  }
+
+  .schedule-date-dialog .modal-actions .secondary {
+    min-height: 36px;
+    padding: 4px 12px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 950px) and (max-height: 360px) {
+  .app .schedule-date-day,
+  .schedule-date-dialog .modal-actions .secondary,
+  .schedule-date-month button,
+  .schedule-date-header button {
+    min-height: 32px;
+    height: 32px;
+  }
+}

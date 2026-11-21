@@ -1,0 +1,1018 @@
+Enum status_students {
+  active
+  expelled
+  academic_leave
+}
+
+Enum status_teacher {
+  active
+  fired
+  vacation
+}
+
+TABLE students {
+  studentID uuid [primary key]
+  studentNumber int [unique, not null]
+  studentName varchar(256) [not null]
+  studentEmail varchar(258) [not null, unique]
+  studentPassword varchar(256) [not null]
+  studentPhoneNumber varchar(29) [not null, unique]
+  studentBirthday timestamp [not null]
+  passportSeria varchar(256) [not null]
+  passportNumber varchar(256) [not null]
+  passportWhoIssued varchar(256) [not null]
+  passportDataIssue varchar(256) [not null]
+  passportCodeDivison varchar(256) [not null]
+  passportCityBorn varchar(256) [not null]
+  passportRegistration varchar(256) [not null]
+  studentStatus status_students [not null]
+  studentEnrollmentDate timestamp [not null]
+  studentGender char(3) [not null]
+  groupID integer [not null]
+  facultyID uuid
+  directionID uuid
+}
+
+TABLE notifications {
+  notificationID uuid [primary key]
+  notificationMessage varchar(128) [not null]
+  studentID uuid
+  employerID uuid
+  teacherID uuid
+  notificationTitle varchar(128) [not null]
+  notificationCategory notification_category [not null]
+  notificationCreatedAt timestamptz [not null, default: `now()`]
+  notificationReadAt timestamptz
+  lessonID integer
+  appoinmentID uuid
+  courseID uuid
+  examID uuid
+  sportID uuid
+  newsID integer
+
+  checks {
+    `num_nonnulls("studentID", "employerID", "teacherID") = 1` [name: 'notifications_one_recipient']
+    `num_nonnulls("lessonID", "appoinmentID", "courseID", "examID", "sportID", "newsID") <= 1` [name: 'notifications_one_target']
+  }
+}
+
+
+TABLE groups {
+  groupID integer [primary key]
+  groupNumber integer [not null]
+}
+
+TABLE teachers {
+  teacherID uuid [primary key]
+  teacherNumber int [not null, unique]
+  teacherName varchar(256) [not null]
+  teacherPosition varchar(256) [not null]
+  teacherDegree varchar(256) [not null]
+  teacherEmail varchar(258) [not null, unique]
+  teacherPassword varchar(256) [not null]
+  teacherPhoneNumber varchar(29) [not null, unique]
+  teacherBirthday timestamp [not null]
+  teacherStatus status_teacher [not null]
+}
+
+TABLE courses {
+  courseID uuid [primary key]
+  facultyID uuid [not null]
+  title varchar(128) [not null, unique]
+  description varchar(564)
+  hours int [not null]
+  semester int [not null]
+}
+
+Table deadlines {
+  deadlineID int [primary key]
+  courseID uuid
+  deadlineTitle varchar(128) [not null]
+  deadlineDescription text [not null]
+  deadlineStartAt timestamptz 
+  deadlineEndAt timestamptz
+}
+
+TABLE classroom {
+  classroomID integer [primary key]
+  buildingID uuid [not null]
+  classroomNumber integer [not null]
+}
+
+TABLE buildings {
+  buildingID uuid [primary key]
+  building varchar(256) [not null]
+  buildingAddress varchar(256)
+}
+
+Table courseGroup {
+  courseGroupID uuid [primary key]
+  courseID uuid [not null]
+  groupID integer [not null]
+  start_date timestamptz [not null]
+  end_date timestamptz [not null]
+}
+
+
+Table courseTeacher {
+  courseID uuid [not null]
+  teacherID uuid [not null]
+
+  indexes {
+    (courseID, teacherID) [pk]
+  }
+}
+
+TABLE faculties {
+  facultyID uuid [primary key]
+  deaneryID int [not null, unique]
+  title varchar(128) [not null, unique]
+  description varchar(564)
+}
+
+TABLE direction {
+  directionID uuid [primary key]
+  facultyID uuid [not null]
+  directionName varchar(256) [not null]
+  directionDescription varchar(564)
+}
+
+Table facultyTeacher {
+  facultyID uuid [not null]
+  teacherID uuid [not null]
+
+  indexes {
+    (facultyID, teacherID) [pk]
+  }
+}
+
+ENUM lesson_status {
+  active
+  canceled
+  rescheduled
+}
+
+table lessons {
+  lessonID integer [primary key]
+  groupID integer [not null]
+  classroomID integer [not null]
+  teacherID uuid [not null]
+  topic varchar(256) [not null]
+  startAt timestamptz [not null]
+  endAt timestamptz [not null]
+  remoteLessonLink varchar(1024) [unique]
+  lessonStatus lesson_status [not null]
+  courseID uuid [not null]
+}
+
+Table lesson_changes {
+  lessonChangeID int [primary key]
+  lessonID integer
+  changedAt timestamptz [not null]
+  oldStartAt timestamptz
+  oldEndAt timestamptz
+  newStartAt timestamptz
+  newEndAt timestamptz
+  oldRoomID integer
+  newRoomID integer
+  changedByTeacherID uuid
+  oldTeacherID uuid 
+  newTeacherID uuid 
+  reason varchar(564) [not null]
+  changedByEmployerID uuid
+  oldLessonStatus lesson_status
+  newLessonStatus lesson_status
+  oldRemoteLessonLink varchar(1024)
+  newRemoteLessonLink varchar(1024)
+}
+
+// Согласованное дополнение 20.11.2026: преподаватель прикрепляет ссылку к заданию.
+Table deadline_links {
+  deadlineID integer [primary key]
+  submissionURL varchar(2048) [not null]
+  updatedByTeacherID uuid
+  updatedAt timestamptz [not null, default: `now()`]
+}
+Ref: deadline_links.deadlineID > deadlines.deadlineID [delete: cascade, update: cascade]
+Ref: deadline_links.updatedByTeacherID > teachers.teacherID [delete: set null, update: cascade]
+
+Table courseScore {
+  courseGraduate uuid [primary key]
+  courseID uuid [not null]
+  studentID uuid [not null]
+  teacherID uuid [not null]
+  score int [check: `score >=0 AND score <=100`]
+  credit boolean
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  indexes {
+    (courseID, studentID) [unique]
+  }
+  checks {
+    `((score IS NULL AND credit IS NULL) OR (score IS NOT NULL AND credit IS NOT NULL AND credit = (score >= 60)))` [name: 'course_score_credit_consistency']
+  }
+}
+Enum appointment_status {
+  creating
+  ready
+  proccess
+  canceled
+}
+
+Table appointment {
+  appoinmentID uuid [primary key]
+  appointmentTypeID uuid
+  studentID uuid
+  employerID uuid
+  buildingID uuid
+  appointmentTitle varchar(100) [not null]
+  appointmentDescription text [not null]
+  fileUrlAttachment varchar(256) [unique]
+  appointmentStatus appointment_status [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz
+  teacherID uuid
+  createdByEmployerID uuid
+  subjectStudentID uuid
+  checks {
+    `num_nonnulls("studentID", "teacherID", "createdByEmployerID") = 1` [name: 'appointment_one_author']
+  }
+}
+
+Table appointment_history {
+  appointmentHistoryID uuid [primary key]
+  appointmentID uuid [not null]
+  appointmentStatus appointment_status [not null]
+  changedAt timestamptz [not null, default: `now()`]
+  reason varchar(564)
+  changedByAccountID uuid
+}
+
+Enum employers_status {
+  active
+  vacation
+  sick
+  fired
+}
+
+Table employers {
+  employerID uuid [primary key]
+  employerNumber int [not null, unique]
+  employerName varchar(256) [not null]
+  employerPhoneNumber varchar(29) [not null, unique]
+  employerEmail varchar(256) [not null, unique]
+  passportSeria varchar(256) [not null]
+  passportNumber varchar(256) [not null]
+  passportWhoIssued varchar(256) [not null]
+  passportDataIssue varchar(256) [not null]
+  passportCodeDivison varchar(256) [not null]
+  passportCityBorn varchar(256) [not null]
+  passportRegistration varchar(256) [not null]
+  departamentID uuid
+  employerStatus employers_status [not null]
+  hireAt timestamptz [not null]
+  fireAt timestamptz
+}
+
+Table departament {
+  departamentID uuid [primary key]
+  directorID uuid [not null]
+  departamentName varchar(256) [not null]
+}
+
+Enum directors_status {
+  active
+  vacation
+  sick
+  fired
+}
+
+Table director {
+  directorID uuid [primary key]
+  directorName varchar(256) [not null]
+  directorBirthday timestamp
+  directorPhoneNumber varchar(29) [not null, unique]
+  directorEmail varchar(256) [not null, unique]
+  passportSeria varchar(256) [not null]
+  passportNumber varchar(256) [not null]
+  passportWhoIssued varchar(256) [not null]
+  passportDataIssue varchar(256) [not null]
+  passportCodeDivison varchar(256) [not null]
+  passportCityBorn varchar(256) [not null]
+  passportRegistration varchar(256) [not null]
+  directorStatus directors_status [not null]
+  hireAt timestamptz [not null]
+  fireAt timestamptz
+}
+
+Table news {
+  newsID integer [primary key]
+  deaneryID int
+  employerID uuid
+  newsTitle varchar(128) [not null]
+  newsDescription TEXT [not null]
+  createdAt timestamptz
+  updatedAt timestamptz
+}
+
+Table deaneries {
+  deaneryID int [primary key]
+  name varchar(150) [not null]
+  email varchar(256)
+  phone varchar(29)
+  officeNumber varchar(29)
+  workingHours varchar(255)
+  deanID uuid
+}
+
+
+Enum exam_status {
+  scheduled
+  completed
+  canceled
+}
+
+Enum sport_registration_status {
+  enrolled
+  canceled
+}
+
+Enum appointment_draft_status {
+  editing
+  submitted
+}
+
+
+Table exams {
+  examID uuid [primary key]
+  courseID uuid [not null]
+  groupID integer [not null]
+  teacherID uuid [not null]
+  classroomID integer
+  examTitle varchar(128) [not null]
+  examStartAt timestamptz [not null]
+  examEndAt timestamptz [not null]
+  examStatus exam_status [not null, default: 'scheduled']
+  checks {
+    `"examEndAt" > "examStartAt"` [name: 'exam_valid_time']
+  }
+}
+
+Table exam_results {
+  examResultID uuid [primary key]
+  examID uuid [not null]
+  studentID uuid [not null]
+  score integer [check: `score >= 0 AND score <= 100`, note: 'NULL если оценка не выставлена']
+  createdAt timestamptz [not null]
+  updatedAt timestamptz
+
+  indexes {
+    (examID, studentID) [unique]
+  }
+}
+
+
+Table sports {
+  sportID uuid [primary key]
+  sportTitle varchar(128) [not null]
+  sportDescription text
+  buildingID uuid
+  sportCapacity integer [not null, check: `"sportCapacity" > 0`]
+  sportStartAt timestamptz [not null]
+  sportEndAt timestamptz [not null]
+  checks {
+    `"sportEndAt" > "sportStartAt"` [name: 'sport_valid_time']
+  }
+}
+
+Table sport_registrations {
+  sportRegistrationID uuid [primary key]
+  sportID uuid [not null]
+  studentID uuid [not null]
+  registrationStatus sport_registration_status [not null, default: 'enrolled']
+  createdAt timestamptz [not null]
+  updatedAt timestamptz
+
+  indexes {
+    (sportID, studentID) [unique]
+  }
+}
+
+
+Table appointment_types {
+  appointmentTypeID uuid [primary key]
+  appointmentTypeTitle varchar(100) [not null, unique]
+  appointmentTypeDescription text
+  isActive boolean [not null, default: true]
+}
+
+Table appointment_drafts {
+  appointmentDraftID uuid [primary key]
+  studentID uuid
+  appointmentTypeID uuid
+  appointmentTitle varchar(100)
+  appointmentDescription text
+  fileUrlAttachment varchar(256)
+  draftStatus appointment_draft_status [not null, default: 'editing']
+  createdAt timestamptz [not null]
+  updatedAt timestamptz [not null]
+  teacherID uuid
+  createdByEmployerID uuid
+  checks {
+    `num_nonnulls("studentID", "teacherID", "createdByEmployerID") = 1` [name: 'appointment_draft_one_author']
+  }
+}
+
+
+
+// Дополнительные перечисления для существующего функционала
+Enum account_role {
+  STUDENT
+  TEACHER
+  SUPPORT
+  DEAN
+  ADMIN
+}
+
+Enum notification_category {
+  news
+  announcement
+  schedule_change
+  deadline
+  request
+  exam
+  sport
+}
+
+// Единая система входа. Старые students.studentPassword и teachers.teacherPassword
+// оставлены без удаления, но для входа используется только accounts.passwordHash (Argon2id).
+Table accounts {
+  accountID uuid [primary key]
+  email varchar(258) [not null, unique]
+  passwordHash varchar(256) [not null]
+  accountRole account_role [not null]
+  studentID uuid [unique]
+  teacherID uuid [unique]
+  employerID uuid [unique]
+  isActive boolean [not null, default: true]
+  createdAt timestamptz [not null, default: `now()`]
+
+  checks {
+    `(("accountRole" = 'STUDENT' AND "studentID" IS NOT NULL AND "teacherID" IS NULL AND "employerID" IS NULL) OR ("accountRole" = 'TEACHER' AND "teacherID" IS NOT NULL AND "studentID" IS NULL AND "employerID" IS NULL) OR ("accountRole" IN ('SUPPORT','DEAN','ADMIN') AND "employerID" IS NOT NULL AND "studentID" IS NULL AND "teacherID" IS NULL))` [name: 'account_role_matches_person']
+  }
+}
+
+// Refresh JWT хранится только в виде хеша; сессия используется для отзыва access JWT.
+Table user_sessions {
+  sessionID uuid [primary key]
+  accountID uuid [not null]
+  refreshTokenHash varchar(256) [not null, unique]
+  createdAt timestamptz [not null, default: `now()`]
+  expiresAt timestamptz [not null]
+  revokedAt timestamptz
+
+  checks {
+    `"expiresAt" > "createdAt"` [name: 'session_valid_expiration']
+  }
+}
+
+// Связь сотрудника деканата с одним или несколькими обслуживаемыми деканатами.
+Table deanery_staff {
+  deaneryID int [not null]
+  employerID uuid [not null]
+
+  indexes {
+    (deaneryID, employerID) [pk]
+  }
+}
+
+// История назначения или передачи заявки между сотрудниками.
+Table appointment_assignments {
+  assignmentID uuid [primary key]
+  appointmentID uuid [not null]
+  oldEmployerID uuid
+  newEmployerID uuid [not null]
+  changedByAccountID uuid [not null]
+  changedAt timestamptz [not null, default: `now()`]
+}
+
+// СВЯЗИ ЭКЗАМЕНОВ
+
+Ref: "courses"."courseID" < "exams"."courseID"
+
+Ref: "groups"."groupID" < "exams"."groupID"
+
+Ref: "teachers"."teacherID" < "exams"."teacherID"
+
+Ref: "classroom"."classroomID" < "exams"."classroomID"
+
+Ref: "exams"."examID" < "exam_results"."examID"
+
+Ref: "students"."studentID" < "exam_results"."studentID"
+
+
+// СВЯЗИ СПОРТА
+
+Ref: "buildings"."buildingID" < "sports"."buildingID"
+
+Ref: "sports"."sportID" < "sport_registrations"."sportID"
+
+Ref: "students"."studentID" < "sport_registrations"."studentID"
+
+
+// СВЯЗИ ТИПОВ ЗАЯВОК
+
+Ref: "appointment_types"."appointmentTypeID" < "appointment"."appointmentTypeID"
+
+// СВЯЗИ ЧЕРНОВИКОВ
+
+Ref: "students"."studentID" < "appointment_drafts"."studentID"
+
+Ref: "appointment_types"."appointmentTypeID" < "appointment_drafts"."appointmentTypeID"
+
+Ref: "courses"."courseID" < "courseGroup"."courseID"
+
+Ref: "teachers"."teacherID" < "courseTeacher"."teacherID"
+
+Ref: "courses"."courseID" < "courseTeacher"."courseID"
+
+Ref: "faculties"."facultyID" < "facultyTeacher"."facultyID"
+
+Ref: "teachers"."teacherID" < "facultyTeacher"."teacherID"
+
+Ref: "faculties"."facultyID" < "direction"."facultyID"
+
+Ref: "groups"."groupID" < "students"."groupID"
+
+Ref: "groups"."groupID" < "courseGroup"."groupID"
+
+Ref: "classroom"."classroomID" < "lessons"."classroomID"
+
+Ref: "groups"."groupID" < "lessons"."groupID"
+
+Ref: "teachers"."teacherID" < "lessons"."teacherID"
+
+Ref: "lessons"."lessonID" < "lesson_changes"."lessonID"
+
+Ref: "classroom"."classroomID" < "lesson_changes"."oldRoomID"
+
+Ref: "classroom"."classroomID" < "lesson_changes"."newRoomID"
+
+Ref: "teachers"."teacherID" < "lesson_changes"."oldTeacherID"
+
+Ref: "teachers"."teacherID" < "lesson_changes"."newTeacherID"
+
+Ref: "teachers"."teacherID" < "lesson_changes"."changedByTeacherID"
+
+Ref: "students"."studentID" < "courseScore"."studentID"
+
+Ref: "courses"."courseID" < "courseScore"."courseID"
+
+Ref: "teachers"."teacherID" < "courseScore"."teacherID"
+
+Ref: "students"."studentID" < "appointment"."studentID"
+
+Ref: "appointment"."appoinmentID" < "appointment_history"."appointmentID"
+
+Ref: "director"."directorID" < "departament"."directorID"
+
+Ref: "departament"."departamentID" < "employers"."departamentID"
+
+Ref: "employers"."employerID" < "appointment"."employerID"
+
+Ref: "employers"."employerID" < "deaneries"."deanID"
+
+Ref: "employers"."employerID" < "news"."employerID"
+
+Ref: "deaneries"."deaneryID" < "news"."deaneryID"
+
+Ref: "faculties"."facultyID" < "students"."facultyID"
+
+Ref: "deaneries"."deaneryID" - "faculties"."deaneryID"
+
+Ref: "courses"."courseID" < "deadlines"."courseID"
+
+Ref: "buildings"."buildingID" < "classroom"."buildingID"
+
+Ref: "buildings"."buildingID" < "appointment"."buildingID"
+
+Ref: "students"."studentID" < "notifications"."studentID"
+
+Ref: "employers"."employerID" < "notifications"."employerID"
+
+Ref: "faculties"."facultyID" < "courses"."facultyID"
+
+// Связи для новых и расширенных частей модели
+Ref: "direction"."directionID" < "students"."directionID"
+Ref: "courses"."courseID" < "lessons"."courseID"
+Ref: "teachers"."teacherID" < "appointment"."teacherID"
+Ref: "employers"."employerID" < "appointment"."createdByEmployerID"
+Ref: "students"."studentID" < "appointment"."subjectStudentID"
+Ref: "teachers"."teacherID" < "appointment_drafts"."teacherID"
+Ref: "employers"."employerID" < "appointment_drafts"."createdByEmployerID"
+Ref: "teachers"."teacherID" < "notifications"."teacherID"
+Ref: "lessons"."lessonID" < "notifications"."lessonID"
+Ref: "appointment"."appoinmentID" < "notifications"."appoinmentID"
+Ref: "courses"."courseID" < "notifications"."courseID"
+Ref: "exams"."examID" < "notifications"."examID"
+Ref: "sports"."sportID" < "notifications"."sportID"
+Ref: "news"."newsID" < "notifications"."newsID"
+Ref: "employers"."employerID" < "lesson_changes"."changedByEmployerID"
+Ref: "accounts"."accountID" < "appointment_history"."changedByAccountID"
+Ref: "students"."studentID" - "accounts"."studentID"
+Ref: "teachers"."teacherID" - "accounts"."teacherID"
+Ref: "employers"."employerID" - "accounts"."employerID"
+Ref: "accounts"."accountID" < "user_sessions"."accountID"
+Ref: "deaneries"."deaneryID" < "deanery_staff"."deaneryID"
+Ref: "employers"."employerID" < "deanery_staff"."employerID"
+Ref: "appointment"."appoinmentID" < "appointment_assignments"."appointmentID"
+Ref: "employers"."employerID" < "appointment_assignments"."oldEmployerID"
+Ref: "employers"."employerID" < "appointment_assignments"."newEmployerID"
+Ref: "accounts"."accountID" < "appointment_assignments"."changedByAccountID"
+
+// Учебные планы и свободное посещение физкультуры. Источник ограничений — миграция 003.
+Table study_plan_periods {
+  periodID uuid [pk, default: `gen_random_uuid()`]
+  facultyID uuid [not null]
+  academicYear integer [not null]
+  semester integer [not null]
+  opensAt timestamptz [not null]
+  closesAt timestamptz [not null]
+  isPublished boolean [not null, default: false]
+  createdByEmployerID uuid
+  createdAt timestamptz [not null, default: `now()`]
+  indexes {
+    (facultyID, academicYear, semester) [unique]
+  }
+}
+
+Table study_plan_requirements {
+  requirementID uuid [pk, default: `gen_random_uuid()`]
+  periodID uuid [not null]
+  courseID uuid [not null]
+  directionID uuid
+  kind text [not null, note: 'common, profile или physical_education. Направление указывается для profile. Один курс физкультуры на период.']
+}
+
+Table course_streams {
+  streamID uuid [pk, default: `gen_random_uuid()`]
+  periodID uuid [not null]
+  courseID uuid [not null]
+  courseGroupID uuid [not null, unique]
+  teacherID uuid [not null]
+  capacity integer [not null]
+  isOpen boolean [not null, default: true]
+  remoteLessonLink varchar(2048)
+  createdAt timestamptz [not null, default: `now()`]
+  indexes {
+    (streamID, periodID, courseID) [unique]
+  }
+}
+
+Table student_stream_selections {
+  studentID uuid [not null]
+  periodID uuid [not null]
+  courseID uuid [not null]
+  streamID uuid [not null]
+  selectedAt timestamptz [not null, default: `now()`]
+  indexes {
+    (studentID, periodID, courseID) [pk]
+    streamID
+  }
+}
+
+Table sport_instructors {
+  sportID uuid [not null]
+  teacherID uuid [not null]
+  assignedByEmployerID uuid
+  assignedAt timestamptz [not null, default: `now()`]
+  indexes {
+    (sportID, teacherID) [pk]
+  }
+}
+
+Table sport_attendance {
+  attendanceID uuid [pk, default: `gen_random_uuid()`]
+  studentID uuid [not null]
+  sportID uuid [not null]
+  teacherID uuid
+  present boolean [not null, default: true]
+  attendedAt timestamptz [not null]
+  weekStart date [note: 'Вычисляемый понедельник по московскому времени']
+  weeklySlot smallint [not null, note: '1 или 2. Уникален для студента и недели среди подтверждённых посещений']
+  markedAt timestamptz [not null, default: `now()`]
+  updatedAt timestamptz [not null, default: `now()`]
+  indexes {
+    (studentID, sportID) [unique]
+  }
+}
+
+Table sport_attendance_history {
+  historyID uuid [pk, default: `gen_random_uuid()`]
+  attendanceID uuid [not null]
+  teacherID uuid
+  present boolean [not null]
+  changedAt timestamptz [not null, default: `now()`]
+}
+
+Ref: study_plan_periods.facultyID > faculties.facultyID [update: cascade, delete: cascade]
+Ref: study_plan_periods.createdByEmployerID > employers.employerID [update: cascade, delete: set null]
+Ref: study_plan_requirements.periodID > study_plan_periods.periodID [update: cascade, delete: cascade]
+Ref: study_plan_requirements.courseID > courses.courseID [update: cascade, delete: cascade]
+Ref: study_plan_requirements.directionID > direction.directionID [update: cascade, delete: cascade]
+Ref: course_streams.periodID > study_plan_periods.periodID [update: cascade, delete: cascade]
+Ref: course_streams.courseID > courses.courseID [update: cascade, delete: cascade]
+Ref: course_streams.(courseGroupID, courseID) > courseGroup.(courseGroupID, courseID) [update: cascade, delete: cascade]
+Ref: course_streams.teacherID > teachers.teacherID [update: cascade, delete: restrict]
+Ref: student_stream_selections.studentID > students.studentID [update: cascade, delete: cascade]
+Ref: student_stream_selections.periodID > study_plan_periods.periodID [update: cascade, delete: cascade]
+Ref: student_stream_selections.(streamID, periodID, courseID) > course_streams.(streamID, periodID, courseID) [update: cascade, delete: cascade]
+Ref: sport_instructors.sportID > sports.sportID [update: cascade, delete: cascade]
+Ref: sport_instructors.teacherID > teachers.teacherID [update: cascade, delete: cascade]
+Ref: sport_instructors.assignedByEmployerID > employers.employerID [update: cascade, delete: set null]
+Ref: sport_attendance.studentID > students.studentID [update: cascade, delete: cascade]
+Ref: sport_attendance.sportID > sports.sportID [update: cascade, delete: cascade]
+Ref: sport_attendance.teacherID > teachers.teacherID [update: cascade, delete: set null]
+Ref: sport_attendance_history.attendanceID > sport_attendance.attendanceID [update: cascade, delete: cascade]
+Ref: sport_attendance_history.teacherID > teachers.teacherID [update: cascade, delete: set null]
+
+// Данные профиля вынесены в отдельные таблицы, миграция 004.
+Table student_profile_photos {
+  studentID uuid [pk]
+  jpeg bytea [not null, note: 'Обработанная фотография без метаданных']
+  updatedAt timestamptz [not null, default: `now()`]
+}
+
+Table student_record_books {
+  studentID uuid [pk]
+  recordBookNumber varchar(64) [not null, unique, note: 'Официальный номер зачётной книжки, отдельный от studentNumber']
+}
+
+Ref: student_profile_photos.studentID > students.studentID [update: cascade, delete: cascade]
+Ref: student_record_books.studentID > students.studentID [update: cascade, delete: cascade]
+
+// Недельные спортивные шаблоны и настройки студента, миграции 005 и 006.
+Table sport_session_rooms {
+  sportID uuid [pk]
+  room text [not null]
+  room_key text [not null]
+}
+Table student_notification_preferences {
+  studentID uuid [not null]
+  category notification_category [not null]
+  indexes {
+    (studentID, category) [pk]
+  }
+}
+Table student_documents {
+  documentID uuid [pk, default: `gen_random_uuid()`]
+  title text [not null]
+  version text [not null]
+  body text [not null]
+  requiresConsent boolean [not null, default: false]
+  publishedAt timestamptz
+  indexes {
+    (title, version) [unique]
+  }
+}
+Table student_document_choices {
+  choiceID uuid [pk, default: `gen_random_uuid()`]
+  studentID uuid [not null]
+  documentID uuid [not null]
+  accepted boolean [not null]
+  changedAt timestamptz [not null, default: `now()`]
+}
+Table sport_semester_schedules {
+  scheduleID uuid [pk, default: `gen_random_uuid()`]
+  facultyID uuid [not null]
+  title varchar(128) [not null]
+  title_key text [not null]
+  academicYear integer [not null]
+  term integer [not null]
+  createdAt timestamptz [not null, default: `now()`]
+  indexes {
+    (facultyID, title_key, academicYear, term) [unique]
+  }
+}
+Table sport_weekly_slots {
+  slotID uuid [pk, default: `gen_random_uuid()`]
+  scheduleID uuid [not null]
+  weekday integer [not null]
+  startTime time [not null]
+  endTime time [not null]
+  classroomID integer [not null]
+  teacherID uuid [not null]
+  capacity integer [not null]
+}
+Table sport_schedule_occurrences {
+  sportID uuid [pk]
+  slotID uuid
+}
+Ref: sport_session_rooms.sportID > sports.sportID [update: cascade, delete: cascade]
+Ref: student_notification_preferences.studentID > students.studentID [update: cascade, delete: cascade]
+Ref: student_document_choices.studentID > students.studentID [update: cascade, delete: cascade]
+Ref: student_document_choices.documentID > student_documents.documentID [update: cascade, delete: restrict]
+Ref: sport_semester_schedules.facultyID > faculties.facultyID [update: cascade, delete: cascade]
+Ref: sport_weekly_slots.scheduleID > sport_semester_schedules.scheduleID [update: cascade, delete: cascade]
+Ref: sport_weekly_slots.classroomID > classroom.classroomID [update: cascade, delete: restrict]
+Ref: sport_weekly_slots.teacherID > teachers.teacherID [update: cascade, delete: restrict]
+Ref: sport_schedule_occurrences.sportID > sports.sportID [update: cascade, delete: cascade]
+Ref: sport_schedule_occurrences.slotID > sport_weekly_slots.slotID [update: cascade, delete: set null]
+
+Table campus_events {
+  eventID uuid [pk, default: `gen_random_uuid()`]
+  facultyID uuid [not null]
+  buildingID uuid [not null]
+  createdByEmployerID uuid
+  title varchar(128) [not null]
+  description varchar(2000) [not null]
+  category varchar(16) [not null, note: 'community, career, volunteering']
+  startAt timestamptz [not null]
+  endAt timestamptz [not null]
+  capacity integer [not null]
+  createdAt timestamptz [not null, default: `now()`]
+}
+Table campus_event_registrations {
+  eventID uuid [not null]
+  studentID uuid [not null]
+  registeredAt timestamptz [not null, default: `now()`]
+  canceledAt timestamptz
+  attendedAt timestamptz
+  ticketID uuid [not null, unique, default: `gen_random_uuid()`]
+  checkedByAccountID uuid
+  checkMethod text
+  indexes {
+    (eventID, studentID) [pk]
+  }
+}
+Ref: campus_events.facultyID > faculties.facultyID [update: cascade, delete: cascade]
+Ref: campus_events.buildingID > buildings.buildingID [update: cascade, delete: restrict]
+Ref: campus_events.createdByEmployerID > employers.employerID [update: cascade, delete: set null]
+Ref: campus_event_registrations.eventID > campus_events.eventID [update: cascade, delete: cascade]
+Ref: campus_event_registrations.studentID > students.studentID [update: cascade, delete: cascade]
+
+Table campus_event_hosts {
+  eventID uuid [pk]
+  teacherID uuid [not null]
+}
+Ref: campus_event_hosts.eventID > campus_events.eventID [update: cascade, delete: cascade]
+Ref: campus_event_hosts.teacherID > teachers.teacherID [update: cascade, delete: restrict]
+Ref: campus_event_registrations.checkedByAccountID > accounts.accountID [update: cascade, delete: set null]
+
+Table news_categories {
+  newsID integer [pk]
+  category text [not null, note: 'important, opportunities, campus, events']
+}
+Ref: news_categories.newsID > news.newsID [update: cascade, delete: cascade]
+
+Table campus_benefits {
+  id uuid [pk]
+  title text [not null]
+  description text [not null]
+  url text
+  published_by uuid
+  published_at timestamptz [not null, default: `now()`]
+  archived_at timestamptz
+}
+Ref: campus_benefits.published_by > accounts.accountID [update: cascade, delete: set null]
+
+Table campus_lost_reports {
+  id uuid [pk]
+  student_id uuid [not null]
+  item_id uuid
+  kind text [not null, note: 'lost, found']
+  title text [not null]
+  description text [not null]
+  location text [not null]
+  created_at timestamptz [not null, default: `now()`]
+  resolved_at timestamptz
+  resolution text
+  resolved_by uuid
+}
+Ref: campus_lost_reports.student_id > students.studentID [update: cascade, delete: cascade]
+Ref: campus_lost_reports.resolved_by > accounts.accountID [update: cascade, delete: set null]
+
+Table campus_resources {
+  id uuid [pk]
+  kind text [not null, note: 'room, equipment, printing']
+  title text [not null]
+  location text [not null]
+}
+Table campus_resource_slots {
+  id uuid [pk]
+  resource_id uuid [not null]
+  starts_at timestamptz [not null]
+  ends_at timestamptz [not null]
+  reserved_by uuid
+}
+Ref: campus_resource_slots.resource_id > campus_resources.id [update: cascade, delete: cascade]
+Ref: campus_resource_slots.reserved_by > students.studentID [update: cascade, delete: set null]
+
+Table support_articles {
+  id uuid [pk]
+  question text [not null]
+  answer text [not null]
+  updated_at timestamptz [not null, default: `now()`]
+  archived_at timestamptz
+}
+Table support_tickets {
+  id uuid [pk]
+  student_id uuid [not null]
+  category text [not null, note: 'study, schedule, technical, dormitory, other, consultation']
+  priority text [not null, note: 'normal, urgent']
+  assigned_to uuid
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  closed_at timestamptz
+}
+Table support_ticket_messages {
+  id uuid [pk]
+  ticket_id uuid [not null]
+  from_student boolean [not null]
+  message text [not null]
+  created_at timestamptz [not null, default: `clock_timestamp()`]
+}
+Ref: support_tickets.student_id > students.studentID [update: cascade, delete: cascade]
+Ref: support_tickets.assigned_to > accounts.accountID [update: cascade, delete: set null]
+Ref: support_ticket_messages.ticket_id > support_tickets.id [update: cascade, delete: cascade]
+
+Table campus_lost_items {
+  id uuid [pk]
+  kind text [not null, note: 'lost, found']
+  title text [not null]
+  location text [not null]
+  published_at timestamptz [not null, default: `now()`]
+  archived_at timestamptz
+}
+Ref: campus_lost_reports.item_id > campus_lost_items.id [update: cascade, delete: set null]
+
+Table career_offers {
+  id uuid [pk]
+  faculty_id uuid [not null]
+  kind text [not null, note: 'vacancy, internship']
+  title text [not null]
+  organization text [not null]
+  location text [not null]
+  description text [not null]
+  url text [not null]
+  published_at timestamptz [not null, default: `now()`]
+  archived_at timestamptz
+}
+Table career_practices {
+  id uuid [pk]
+  student_id uuid [not null]
+  organization text [not null]
+  starts_on date [not null]
+  ends_on date [not null]
+  report_due_on date [not null]
+  state text [not null, default: 'assigned', note: 'assigned, submitted, revision, accepted']
+  report_file text
+  feedback text
+}
+Ref: career_offers.faculty_id > faculties.facultyID [update: cascade, delete: cascade]
+Ref: career_practices.student_id > students.studentID [update: cascade, delete: cascade]
+
+Table student_portfolios {
+  student_id uuid [pk]
+  bio text [not null, default: '']
+  share_id uuid [unique]
+}
+Table student_portfolio_items {
+  id uuid [pk]
+  student_id uuid [not null]
+  kind text [not null, note: 'project, certificate, achievement, publication, volunteering, skill']
+  title text [not null]
+  description text [not null]
+  url text
+  created_at timestamptz [not null, default: `now()`]
+}
+Ref: student_portfolios.student_id > students.studentID [update: cascade, delete: cascade]
+Ref: student_portfolio_items.student_id > students.studentID [update: cascade, delete: cascade]
+
+Table staff_account_audit {
+  id uuid [pk, default: `gen_random_uuid()`]
+  actor_id uuid
+  target_id uuid
+  target_email text [not null]
+  action text [not null, note: 'created, updated']
+  previous_role text
+  next_role text [not null]
+  previous_active boolean
+  next_active boolean [not null]
+  changed_at timestamptz [not null, default: `now()`]
+}
+Table staff_course_materials {
+  id uuid [pk]
+  course_group_id uuid [not null]
+  teacher_id uuid [not null]
+  title text [not null]
+  description text [not null]
+  url text
+  file_name text
+  published boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+}
+Ref: staff_account_audit.actor_id > accounts.accountID [update: cascade, delete: set null]
+Ref: staff_account_audit.target_id > accounts.accountID [update: cascade, delete: set null]
+Ref: staff_course_materials.course_group_id > courseGroup.courseGroupID [update: cascade, delete: cascade]
+Ref: staff_course_materials.teacher_id > teachers.teacherID [update: cascade, delete: cascade]

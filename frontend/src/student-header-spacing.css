@@ -1,0 +1,34 @@
+.topbar .top-actions {
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.topbar .top-actions > .avatar {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  cursor: pointer;
+}
+
+.activities-view > .card > .card-head,
+.activities-view > .content-grid > .card > .card-head {
+  min-height: 36px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+@media (max-width: 680px) {
+  .shell .topbar {
+    gap: 12px;
+  }
+
+  .topbar .top-actions {
+    gap: 8px;
+  }
+
+  .topbar .top-actions > .avatar {
+    width: 42px;
+    height: 42px;
+  }
+}
